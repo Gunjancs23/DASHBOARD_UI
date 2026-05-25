@@ -1,7 +1,5 @@
-version: '3.8'
-
 services:
-  postgress:
+  postgres:
     image: postgres:18
     container_name: postgres_db
     environment:
@@ -12,16 +10,24 @@ services:
       - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lamadev -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     
   app:
     build: .
     container_name: nextjs_app
     ports:
       - '3000:3000'
+    env_file:
+      - .env
     environment:
-      - DATABASE_URL: postgresql://lamadev:lama123456@localhost:5432/postgres
+      DATABASE_URL: postgresql://lamadev:lama123456@postgres:5432/postgres
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
 volumes:
   postgres_data:

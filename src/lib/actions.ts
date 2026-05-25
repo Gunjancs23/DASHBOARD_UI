@@ -55,6 +55,8 @@ const isAdminUser = async () => {
   return role === "admin";
 };
 
+const shouldRequireClerkUsers = () => process.env.REQUIRE_CLERK_USERS === "true";
+
 const deleteClerkUser = async (id: string) => {
   try {
     await (await clerkClient()).users.deleteUser(id);
@@ -89,7 +91,7 @@ const createAuthUser = async ({
   } catch (err) {
     console.log(err);
 
-    if (process.env.NODE_ENV === "production") {
+    if (shouldRequireClerkUsers()) {
       throw err;
     }
 
@@ -120,7 +122,7 @@ const updateAuthUser = async ({
   } catch (err) {
     console.log(err);
 
-    if (process.env.NODE_ENV === "production") {
+    if (shouldRequireClerkUsers()) {
       throw err;
     }
   }
@@ -193,6 +195,18 @@ const deleteLessonRecord = async (id: number) => {
   await prisma.lesson.delete({
     where: {
       id,
+    },
+  });
+};
+
+const getOrCreateGrade = async (level: number) => {
+  return prisma.grade.upsert({
+    where: {
+      level,
+    },
+    update: {},
+    create: {
+      level,
     },
   });
 };
@@ -295,8 +309,15 @@ export const createClass = async (
   data: ClassSchema
 ) => {
   try {
+    const grade = await getOrCreateGrade(data.gradeLevel);
+
     await prisma.class.create({
-      data,
+      data: {
+        name: data.name,
+        capacity: data.capacity,
+        gradeId: grade.id,
+        supervisorId: data.supervisorId || null,
+      },
     });
 
     // revalidatePath("/list/class");
@@ -311,12 +332,23 @@ export const updateClass = async (
   currentState: CurrentState,
   data: ClassSchema
 ) => {
+  if (!data.id) {
+    return { success: false, error: true };
+  }
+
   try {
+    const grade = await getOrCreateGrade(data.gradeLevel);
+
     await prisma.class.update({
       where: {
         id: data.id,
       },
-      data,
+      data: {
+        name: data.name,
+        capacity: data.capacity,
+        gradeId: grade.id,
+        supervisorId: data.supervisorId || null,
+      },
     });
 
     // revalidatePath("/list/class");
@@ -547,6 +579,8 @@ export const createStudent = async (
       return { success: false, error: true };
     }
 
+    const grade = await getOrCreateGrade(data.gradeLevel);
+
     const userId = await createAuthUser({
       role: "student",
       username: data.username,
@@ -568,7 +602,7 @@ export const createStudent = async (
         bloodType: data.bloodType,
         sex: data.sex,
         birthday: data.birthday,
-        gradeId: data.gradeId,
+        gradeId: grade.id,
         classId: data.classId,
         parentId: data.parentId,
       },
@@ -590,6 +624,8 @@ export const updateStudent = async (
     return { success: false, error: true };
   }
   try {
+    const grade = await getOrCreateGrade(data.gradeLevel);
+
     await updateAuthUser({
       id: data.id,
       username: data.username,
@@ -613,7 +649,7 @@ export const updateStudent = async (
         bloodType: data.bloodType,
         sex: data.sex,
         birthday: data.birthday,
-        gradeId: data.gradeId,
+        gradeId: grade.id,
         classId: data.classId,
         parentId: data.parentId,
       },
@@ -968,7 +1004,7 @@ export const createAssignment = async (
   const { sessionClaims } = await auth();
   const role = (sessionClaims?.metadata as { role?: string })?.role;
 
-  if (role === "admin") {
+  if (role !== "admin" && role !== "teacher") {
     return { success: false, error: true };
   }
 
@@ -1017,7 +1053,7 @@ export const deleteAssignment = async (
   const { sessionClaims } = await auth();
   const role = (sessionClaims?.metadata as { role?: string })?.role;
 
-  if (role === "admin") {
+  if (role !== "admin" && role !== "teacher") {
     return { success: false, error: true };
   }
 
