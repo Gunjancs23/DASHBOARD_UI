@@ -1463,6 +1463,7 @@ export const setAttendanceStatus = async (data: FormData) => {
     }
 
     revalidatePath("/list/attendance");
+    revalidatePath("/admin");
     return { success: true, error: false };
   } catch (err) {
     console.log(err);
