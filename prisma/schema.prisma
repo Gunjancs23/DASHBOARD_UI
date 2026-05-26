@@ -17,8 +17,8 @@ model Student {
   username    String       @unique
   name        String
   surname     String
-  email       String?      @unique
-  phone       String?      @unique
+  email       String?
+  phone       String?
   address     String
   img         String?
   bloodType   String
@@ -40,8 +40,8 @@ model Teacher {
   username  String    @unique
   name      String
   surname   String
-  email     String?   @unique
-  phone     String?   @unique
+  email     String?
+  phone     String?
   address   String
   img       String?
   bloodType String
@@ -58,8 +58,8 @@ model Parent {
   username  String    @unique
   name      String
   surname   String
-  email     String?   @unique
-  phone     String    @unique
+  email     String?
+  phone     String
   address   String
   createdAt DateTime  @default(now())
   students  Student[]

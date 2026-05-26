@@ -20,7 +20,28 @@ import { Prisma } from "@prisma/client";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { getAnnouncementAudienceWhere } from "./announcements";
 
-type CurrentState = { success: boolean; error: boolean };
+type CurrentState = { success: boolean; error: boolean; message?: string };
+
+const getPrismaErrorMessage = (err: unknown) => {
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    if (err.code === "P2002") {
+      const target = err.meta?.target;
+      const fields = Array.isArray(target)
+        ? target.join(", ")
+        : typeof target === "string"
+        ? target
+        : "field";
+
+      return `${fields} already exists.`;
+    }
+
+    if (err.code === "P2003") {
+      return "The selected related record does not exist.";
+    }
+  }
+
+  return "Something went wrong!";
+};
 
 const revalidateAnnouncementViews = () => {
   revalidatePath("/list/announcements");
@@ -422,7 +443,7 @@ export const deleteClass = async (
 export const createTeacher = async (
   currentState: CurrentState,
   data: TeacherSchema
-) => {
+): Promise<CurrentState> => {
   try {
     const userId = await createAuthUser({
       role: "teacher",
@@ -453,18 +474,18 @@ export const createTeacher = async (
       },
     });
 
-    // revalidatePath("/list/teachers");
+    revalidatePath("/list/teachers");
     return { success: true, error: false };
   } catch (err) {
     console.log(err);
-    return { success: false, error: true };
+    return { success: false, error: true, message: getPrismaErrorMessage(err) };
   }
 };
 
 export const updateTeacher = async (
   currentState: CurrentState,
   data: TeacherSchema
-) => {
+): Promise<CurrentState> => {
   if (!data.id) {
     return { success: false, error: true };
   }
@@ -499,11 +520,11 @@ export const updateTeacher = async (
         },
       },
     });
-    // revalidatePath("/list/teachers");
+    revalidatePath("/list/teachers");
     return { success: true, error: false };
   } catch (err) {
     console.log(err);
-    return { success: false, error: true };
+    return { success: false, error: true, message: getPrismaErrorMessage(err) };
   }
 };
 
@@ -568,7 +589,7 @@ export const deleteTeacher = async (
 export const createStudent = async (
   currentState: CurrentState,
   data: StudentSchema
-) => {
+): Promise<CurrentState> => {
   try {
     const classItem = await prisma.class.findUnique({
       where: { id: data.classId },
@@ -576,7 +597,11 @@ export const createStudent = async (
     });
 
     if (classItem && classItem.capacity === classItem._count.students) {
-      return { success: false, error: true };
+      return {
+        success: false,
+        error: true,
+        message: "The selected class is already full.",
+      };
     }
 
     const grade = await getOrCreateGrade(data.gradeLevel);
@@ -608,18 +633,18 @@ export const createStudent = async (
       },
     });
 
-    // revalidatePath("/list/students");
+    revalidatePath("/list/students");
     return { success: true, error: false };
   } catch (err) {
     console.log(err);
-    return { success: false, error: true };
+    return { success: false, error: true, message: getPrismaErrorMessage(err) };
   }
 };
 
 export const updateStudent = async (
   currentState: CurrentState,
   data: StudentSchema
-) => {
+): Promise<CurrentState> => {
   if (!data.id) {
     return { success: false, error: true };
   }
@@ -654,11 +679,11 @@ export const updateStudent = async (
         parentId: data.parentId,
       },
     });
-    // revalidatePath("/list/students");
+    revalidatePath("/list/students");
     return { success: true, error: false };
   } catch (err) {
     console.log(err);
-    return { success: false, error: true };
+    return { success: false, error: true, message: getPrismaErrorMessage(err) };
   }
 };
 
@@ -791,7 +816,7 @@ export const deleteExam = async (
 export const createParent = async (
   currentState: CurrentState,
   data: ParentSchema
-) => {
+): Promise<CurrentState> => {
   try {
     const userId = await createAuthUser({
       role: "parent",
@@ -817,14 +842,14 @@ export const createParent = async (
     return { success: true, error: false };
   } catch (err) {
     console.log(err);
-    return { success: false, error: true };
+    return { success: false, error: true, message: getPrismaErrorMessage(err) };
   }
 };
 
 export const updateParent = async (
   currentState: CurrentState,
   data: ParentSchema
-) => {
+): Promise<CurrentState> => {
   if (!data.id) {
     return { success: false, error: true };
   }
@@ -856,7 +881,7 @@ export const updateParent = async (
     return { success: true, error: false };
   } catch (err) {
     console.log(err);
-    return { success: false, error: true };
+    return { success: false, error: true, message: getPrismaErrorMessage(err) };
   }
 };
 
