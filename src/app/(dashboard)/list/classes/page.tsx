@@ -11,10 +11,10 @@ import {
   getPageNumber,
   getSortDirection,
 } from "@/lib/tableControls";
-import { Class, Prisma, Teacher } from "@prisma/client";
+import { Class, Grade, Prisma, Teacher } from "@prisma/client";
 import { auth } from "@clerk/nextjs/server";
 
-type ClassList = Class & { supervisor: Teacher | null };
+type ClassList = Class & { supervisor: Teacher | null; grade: Grade };
 
 const ClassListPage = async ({
   searchParams,
@@ -63,7 +63,7 @@ const renderRow = (item: ClassList) => (
   >
     <td className="flex items-center gap-4 p-4">{item.name}</td>
     <td className="hidden md:table-cell">{item.capacity}</td>
-    <td className="hidden md:table-cell">{item.name[0]}</td>
+    <td className="hidden md:table-cell">{item.grade.level}</td>
     <td className="hidden md:table-cell">
       {item.supervisor
         ? item.supervisor.name + " " + item.supervisor.surname
@@ -116,7 +116,7 @@ const renderRow = (item: ClassList) => (
   const orderByOptions: Record<string, Prisma.ClassOrderByWithRelationInput> = {
     name: { name: sortDirection },
     capacity: { capacity: sortDirection },
-    grade: { gradeId: sortDirection },
+    grade: { grade: { level: sortDirection } },
   };
   const orderBy = orderByOptions[searchParams.sort || "name"] || orderByOptions.name;
 
@@ -125,6 +125,7 @@ const renderRow = (item: ClassList) => (
       where: query,
       include: {
         supervisor: true,
+        grade: true,
       },
       take: ITEM_PER_PAGE,
       skip: ITEM_PER_PAGE * (p - 1),

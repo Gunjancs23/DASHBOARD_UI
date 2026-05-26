@@ -12,13 +12,13 @@ import {
   getPageNumber,
   getSortDirection,
 } from "@/lib/tableControls";
-import { Class, Prisma, Student } from "@prisma/client";
+import { Class, Grade, Prisma, Student } from "@prisma/client";
 import Image from "next/image";
 import Link from "next/link";
 
 import { auth } from "@clerk/nextjs/server";
 
-type StudentList = Student & { class: Class };
+type StudentList = Student & { class: Class; grade: Grade };
 
 const StudentListPage = async ({
   searchParams,
@@ -82,7 +82,7 @@ const StudentListPage = async ({
         </div>
       </td>
       <td className="hidden md:table-cell">{item.username}</td>
-      <td className="hidden md:table-cell">{item.class.name[0]}</td>
+      <td className="hidden md:table-cell">{item.grade.level}</td>
       <td className="hidden md:table-cell">{item.phone}</td>
       <td className="hidden md:table-cell">{item.address}</td>
       <td>
@@ -158,6 +158,7 @@ const StudentListPage = async ({
     name: { name: sortDirection },
     studentId: { username: sortDirection },
     class: { class: { name: sortDirection } },
+    grade: { grade: { level: sortDirection } },
     createdAt: { createdAt: sortDirection },
   };
   const orderBy = orderByOptions[searchParams.sort || "name"] || orderByOptions.name;
@@ -167,6 +168,7 @@ const StudentListPage = async ({
       where: query,
       include: {
         class: true,
+        grade: true,
       },
       take: ITEM_PER_PAGE,
       skip: ITEM_PER_PAGE * (p - 1),
@@ -213,6 +215,7 @@ const StudentListPage = async ({
   const sortOptions = [
     { label: "Name", value: "name" },
     { label: "Student ID", value: "studentId" },
+    { label: "Grade", value: "grade" },
     { label: "Class", value: "class" },
     { label: "Newest", value: "createdAt" },
   ];
