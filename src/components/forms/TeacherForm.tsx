@@ -166,20 +166,30 @@ const TeacherForm = ({
         </div>
         <div className="flex flex-col gap-2 w-full md:w-1/4">
           <label className="text-xs text-gray-500">Subjects</label>
-          <select
-            multiple
-            className="ring-[1.5px] ring-gray-300 p-2 rounded-md text-sm w-full"
-            {...register("subjects")}
-            defaultValue={data?.subjects?.map((subject: { id: number }) =>
-              subject.id.toString()
-            )}
-          >
-            {subjects.map((subject: { id: number; name: string }) => (
-              <option value={subject.id} key={subject.id}>
-                {subject.name}
-              </option>
-            ))}
-          </select>
+          <div className="ring-[1.5px] ring-gray-300 p-2 rounded-md text-sm w-full max-h-36 overflow-y-auto flex flex-col gap-2">
+            {subjects.map((subject: { id: number; name: string }) => {
+              const subjectId = subject.id.toString();
+              const isSelected = data?.subjects?.some(
+                (selectedSubject: { id: number }) =>
+                  selectedSubject.id.toString() === subjectId
+              );
+
+              return (
+                <label
+                  className="flex items-center gap-2 text-sm text-gray-700"
+                  key={subject.id}
+                >
+                  <input
+                    type="checkbox"
+                    value={subjectId}
+                    defaultChecked={isSelected}
+                    {...register("subjects")}
+                  />
+                  <span>{subject.name}</span>
+                </label>
+              );
+            })}
+          </div>
           {errors.subjects?.message && (
             <p className="text-xs text-red-400">
               {errors.subjects.message.toString()}

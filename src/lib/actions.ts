@@ -1,6 +1,5 @@
 "use server";
 
-import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import {
   AnnouncementSchema,
@@ -43,6 +42,22 @@ const getPrismaErrorMessage = (err: unknown) => {
   return "Something went wrong!";
 };
 
+const getClerkErrorMessage = (err: unknown) => {
+  const clerkErrors = (err as { errors?: { longMessage?: string; message?: string }[] })
+    ?.errors;
+  const message = clerkErrors?.[0]?.longMessage || clerkErrors?.[0]?.message;
+
+  return message || "Clerk could not create or update this login account.";
+};
+
+const getActionErrorMessage = (err: unknown) => {
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    return getPrismaErrorMessage(err);
+  }
+
+  return getClerkErrorMessage(err);
+};
+
 const revalidateAnnouncementViews = () => {
   revalidatePath("/list/announcements");
   revalidatePath("/admin");
@@ -76,8 +91,6 @@ const isAdminUser = async () => {
   return role === "admin";
 };
 
-const shouldRequireClerkUsers = () => process.env.REQUIRE_CLERK_USERS === "true";
-
 const deleteClerkUser = async (id: string) => {
   try {
     await (await clerkClient()).users.deleteUser(id);
@@ -88,36 +101,29 @@ const deleteClerkUser = async (id: string) => {
 
 const createAuthUser = async ({
   username,
+  email,
   password,
   name,
   surname,
   role,
 }: {
   username: string;
-  password?: string;
+  email?: string;
+  password: string;
   name: string;
   surname: string;
   role: "teacher" | "student" | "parent";
 }) => {
-  try {
-    const user = await (await clerkClient()).users.createUser({
-      username,
-      password,
-      firstName: name,
-      lastName: surname,
-      publicMetadata: { role },
-    });
+  const user = await (await clerkClient()).users.createUser({
+    username,
+    ...(email ? { emailAddress: [email] } : {}),
+    password,
+    firstName: name,
+    lastName: surname,
+    publicMetadata: { role },
+  });
 
-    return user.id;
-  } catch (err) {
-    console.log(err);
-
-    if (shouldRequireClerkUsers()) {
-      throw err;
-    }
-
-    return `${role}_${randomUUID()}`;
-  }
+  return user.id;
 };
 
 const updateAuthUser = async ({
@@ -133,20 +139,12 @@ const updateAuthUser = async ({
   name: string;
   surname: string;
 }) => {
-  try {
-    await (await clerkClient()).users.updateUser(id, {
-      username,
-      ...(password ? { password } : {}),
-      firstName: name,
-      lastName: surname,
-    });
-  } catch (err) {
-    console.log(err);
-
-    if (shouldRequireClerkUsers()) {
-      throw err;
-    }
-  }
+  await (await clerkClient()).users.updateUser(id, {
+    username,
+    ...(password ? { password } : {}),
+    firstName: name,
+    lastName: surname,
+  });
 };
 
 const deleteStudentRecord = async (id: string) => {
@@ -444,11 +442,14 @@ export const createTeacher = async (
   currentState: CurrentState,
   data: TeacherSchema
 ): Promise<CurrentState> => {
+  let userId: string | undefined;
+
   try {
-    const userId = await createAuthUser({
+    userId = await createAuthUser({
       role: "teacher",
       username: data.username,
-      password: data.password,
+      email: data.email || undefined,
+      password: data.password!,
       name: data.name,
       surname: data.surname,
     });
@@ -478,7 +479,12 @@ export const createTeacher = async (
     return { success: true, error: false };
   } catch (err) {
     console.log(err);
-    return { success: false, error: true, message: getPrismaErrorMessage(err) };
+
+    if (userId) {
+      await deleteClerkUser(userId);
+    }
+
+    return { success: false, error: true, message: getActionErrorMessage(err) };
   }
 };
 
@@ -524,7 +530,7 @@ export const updateTeacher = async (
     return { success: true, error: false };
   } catch (err) {
     console.log(err);
-    return { success: false, error: true, message: getPrismaErrorMessage(err) };
+    return { success: false, error: true, message: getActionErrorMessage(err) };
   }
 };
 
@@ -590,6 +596,8 @@ export const createStudent = async (
   currentState: CurrentState,
   data: StudentSchema
 ): Promise<CurrentState> => {
+  let userId: string | undefined;
+
   try {
     const classItem = await prisma.class.findUnique({
       where: { id: data.classId },
@@ -606,10 +614,11 @@ export const createStudent = async (
 
     const grade = await getOrCreateGrade(data.gradeLevel);
 
-    const userId = await createAuthUser({
+    userId = await createAuthUser({
       role: "student",
       username: data.username,
-      password: data.password,
+      email: data.email || undefined,
+      password: data.password!,
       name: data.name,
       surname: data.surname,
     });
@@ -637,7 +646,12 @@ export const createStudent = async (
     return { success: true, error: false };
   } catch (err) {
     console.log(err);
-    return { success: false, error: true, message: getPrismaErrorMessage(err) };
+
+    if (userId) {
+      await deleteClerkUser(userId);
+    }
+
+    return { success: false, error: true, message: getActionErrorMessage(err) };
   }
 };
 
@@ -683,7 +697,7 @@ export const updateStudent = async (
     return { success: true, error: false };
   } catch (err) {
     console.log(err);
-    return { success: false, error: true, message: getPrismaErrorMessage(err) };
+    return { success: false, error: true, message: getActionErrorMessage(err) };
   }
 };
 
@@ -817,11 +831,14 @@ export const createParent = async (
   currentState: CurrentState,
   data: ParentSchema
 ): Promise<CurrentState> => {
+  let userId: string | undefined;
+
   try {
-    const userId = await createAuthUser({
+    userId = await createAuthUser({
       role: "parent",
       username: data.username,
-      password: data.password,
+      email: data.email || undefined,
+      password: data.password!,
       name: data.name,
       surname: data.surname,
     });
@@ -842,7 +859,12 @@ export const createParent = async (
     return { success: true, error: false };
   } catch (err) {
     console.log(err);
-    return { success: false, error: true, message: getPrismaErrorMessage(err) };
+
+    if (userId) {
+      await deleteClerkUser(userId);
+    }
+
+    return { success: false, error: true, message: getActionErrorMessage(err) };
   }
 };
 
@@ -881,7 +903,7 @@ export const updateParent = async (
     return { success: true, error: false };
   } catch (err) {
     console.log(err);
-    return { success: false, error: true, message: getPrismaErrorMessage(err) };
+    return { success: false, error: true, message: getActionErrorMessage(err) };
   }
 };
 
