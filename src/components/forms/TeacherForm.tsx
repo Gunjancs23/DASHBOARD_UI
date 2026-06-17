@@ -51,9 +51,15 @@ const TeacherForm = ({
 
   useEffect(() => {
     if (state.success) {
-      toast(`Teacher has been ${type === "create" ? "created" : "updated"}!`);
+      toast.success(
+        `Teacher has been ${type === "create" ? "created" : "updated"}!`
+      );
       setOpen(false);
       router.refresh();
+    }
+
+    if (state.error) {
+      toast.error(state.message || "Teacher action failed.");
     }
   }, [state, router, type, setOpen]);
 

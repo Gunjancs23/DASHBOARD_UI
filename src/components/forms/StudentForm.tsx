@@ -50,9 +50,15 @@ const StudentForm = ({
 
   useEffect(() => {
     if (state.success) {
-      toast(`Student has been ${type === "create" ? "created" : "updated"}!`);
+      toast.success(
+        `Student has been ${type === "create" ? "created" : "updated"}!`
+      );
       setOpen(false);
       router.refresh();
+    }
+
+    if (state.error) {
+      toast.error(state.message || "Student action failed.");
     }
   }, [state, router, type, setOpen]);
 

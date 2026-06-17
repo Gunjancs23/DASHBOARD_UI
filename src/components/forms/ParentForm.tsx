@@ -45,9 +45,15 @@ const ParentForm = ({
 
   useEffect(() => {
     if (state.success) {
-      toast(`Parent has been ${type === "create" ? "created" : "updated"}!`);
+      toast.success(
+        `Parent has been ${type === "create" ? "created" : "updated"}!`
+      );
       setOpen(false);
       router.refresh();
+    }
+
+    if (state.error) {
+      toast.error(state.message || "Parent action failed.");
     }
   }, [state, router, type, setOpen]);
 

@@ -36,6 +36,21 @@ const deleteActionMap = {
   announcement: deleteAnnouncement,
 };
 
+const tableLabels: Record<FormContainerProps["table"], string> = {
+  announcement: "Announcement",
+  assignment: "Assignment",
+  attendance: "Attendance",
+  class: "Subject",
+  exam: "Exam",
+  event: "Event",
+  lesson: "Lesson",
+  parent: "Parent",
+  result: "Result",
+  student: "Student",
+  subject: "Subject",
+  teacher: "Teacher",
+};
+
 // USE LAZY LOADING
 
 // import TeacherForm from "./forms/TeacherForm";
@@ -200,9 +215,13 @@ const FormModal = ({
 
     useEffect(() => {
       if (state.success) {
-        toast(`${table} has been deleted!`);
+        toast.success(`${tableLabels[table]} has been deleted!`);
         setOpen(false);
         router.refresh();
+      }
+
+      if (state.error) {
+        toast.error(state.message || `${tableLabels[table]} could not be deleted.`);
       }
     }, [state, router]);
 

@@ -48,7 +48,7 @@ const ClassForm = ({
 
   useEffect(() => {
     if (state.success) {
-      toast(`Class has been ${type === "create" ? "created" : "updated"}!`);
+      toast(`Subject has been ${type === "create" ? "created" : "updated"}!`);
       setOpen(false);
       router.refresh();
     }
