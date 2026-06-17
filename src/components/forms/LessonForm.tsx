@@ -10,10 +10,10 @@ import { createLesson, updateLesson } from "@/lib/actions";
 import { lessonSchema, LessonSchema } from "@/lib/formValidationSchemas";
 import InputField from "../InputField";
 
-const formatDateTime = (date?: Date | string) => {
+const formatTime = (date?: Date | string) => {
   if (!date) return undefined;
 
-  return new Date(date).toISOString().slice(0, 16);
+  return new Date(date).toTimeString().slice(0, 5);
 };
 
 const LessonForm = ({
@@ -75,16 +75,16 @@ const LessonForm = ({
         <InputField
           label="Start Time"
           name="startTime"
-          type="datetime-local"
-          defaultValue={formatDateTime(data?.startTime)}
+          type="time"
+          defaultValue={formatTime(data?.startTime)}
           register={register}
           error={errors.startTime}
         />
         <InputField
           label="End Time"
           name="endTime"
-          type="datetime-local"
-          defaultValue={formatDateTime(data?.endTime)}
+          type="time"
+          defaultValue={formatTime(data?.endTime)}
           register={register}
           error={errors.endTime}
         />

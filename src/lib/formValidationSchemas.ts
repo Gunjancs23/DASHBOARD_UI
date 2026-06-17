@@ -24,6 +24,19 @@ const passwordSchema = z
   .optional()
   .or(z.literal(""));
 
+const usernameSchema = z
+  .string()
+  .trim()
+  .min(3, { message: "Username must be at least 3 characters long!" })
+  .max(20, { message: "Username must be at most 20 characters long!" });
+
+const optionalEmailSchema = z
+  .string()
+  .trim()
+  .email({ message: "Invalid email address!" })
+  .optional()
+  .or(z.literal(""));
+
 const requirePasswordOnCreate = <T extends { id?: string; password?: string }>(
   data: T,
   ctx: z.RefinementCtx
@@ -53,18 +66,11 @@ const subjectIdsSchema = z.preprocess(
 export const teacherSchema = z
   .object({
     id: z.string().optional(),
-    username: z
-      .string()
-      .min(3, { message: "Username must be at least 3 characters long!" })
-      .max(20, { message: "Username must be at most 20 characters long!" }),
+    username: usernameSchema,
     password: passwordSchema,
     name: z.string().min(1, { message: "First name is required!" }),
     surname: z.string().min(1, { message: "Last name is required!" }),
-    email: z
-      .string()
-      .email({ message: "Invalid email address!" })
-      .optional()
-      .or(z.literal("")),
+    email: optionalEmailSchema,
     phone: z.string().optional(),
     address: z.string(),
     img: z.string().optional(),
@@ -80,18 +86,11 @@ export type TeacherSchema = z.infer<typeof teacherSchema>;
 export const studentSchema = z
   .object({
     id: z.string().optional(),
-    username: z
-      .string()
-      .min(3, { message: "Username must be at least 3 characters long!" })
-      .max(20, { message: "Username must be at most 20 characters long!" }),
+    username: usernameSchema,
     password: passwordSchema,
     name: z.string().min(1, { message: "First name is required!" }),
     surname: z.string().min(1, { message: "Last name is required!" }),
-    email: z
-      .string()
-      .email({ message: "Invalid email address!" })
-      .optional()
-      .or(z.literal("")),
+    email: optionalEmailSchema,
     phone: z.string().optional(),
     address: z.string(),
     img: z.string().optional(),
@@ -121,21 +120,18 @@ const optionalNumber = z.preprocess(
   z.coerce.number().optional()
 );
 
+const timeSchema = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, { message: "Time is required!" });
+
 export const parentSchema = z
   .object({
     id: z.string().optional(),
-    username: z
-      .string()
-      .min(3, { message: "Username must be at least 3 characters long!" })
-      .max(20, { message: "Username must be at most 20 characters long!" }),
+    username: usernameSchema,
     password: passwordSchema,
     name: z.string().min(1, { message: "First name is required!" }),
     surname: z.string().min(1, { message: "Last name is required!" }),
-    email: z
-      .string()
-      .email({ message: "Invalid email address!" })
-      .optional()
-      .or(z.literal("")),
+    email: optionalEmailSchema,
     phone: z.string().min(1, { message: "Phone is required!" }),
     address: z.string().min(1, { message: "Address is required!" }),
   })
@@ -143,18 +139,28 @@ export const parentSchema = z
 
 export type ParentSchema = z.infer<typeof parentSchema>;
 
-export const lessonSchema = z.object({
-  id: z.coerce.number().optional(),
-  name: z.string().min(1, { message: "Lesson name is required!" }),
-  day: z.enum(["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"], {
-    message: "Day is required!",
-  }),
-  startTime: z.coerce.date({ message: "Start time is required!" }),
-  endTime: z.coerce.date({ message: "End time is required!" }),
-  subjectId: z.coerce.number({ message: "Subject is required!" }),
-  classId: z.coerce.number({ message: "Class is required!" }),
-  teacherId: z.string().min(1, { message: "Teacher is required!" }),
-});
+export const lessonSchema = z
+  .object({
+    id: z.coerce.number().optional(),
+    name: z.string().min(1, { message: "Lesson name is required!" }),
+    day: z.enum(["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"], {
+      message: "Day is required!",
+    }),
+    startTime: timeSchema,
+    endTime: timeSchema,
+    subjectId: z.coerce.number({ message: "Subject is required!" }),
+    classId: z.coerce.number({ message: "Class is required!" }),
+    teacherId: z.string().min(1, { message: "Teacher is required!" }),
+  })
+  .superRefine((data, ctx) => {
+    if (data.endTime <= data.startTime) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["endTime"],
+        message: "End time must be after start time!",
+      });
+    }
+  });
 
 export type LessonSchema = z.infer<typeof lessonSchema>;
 

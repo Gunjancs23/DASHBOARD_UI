@@ -7,13 +7,22 @@ import { auth } from "@clerk/nextjs/server";
 const StudentPage = async () => {
   const { userId } = await auth();
 
-  const classItem = await prisma.class.findFirst({
+  const student = await prisma.student.findUnique({
     where: {
-      students: { some: { id: userId! } },
+      id: userId!,
     },
     select: {
       id: true,
-      name: true,
+      class: {
+        select: {
+          name: true,
+        },
+      },
+      _count: {
+        select: {
+          schedules: true,
+        },
+      },
     },
   });
 
@@ -21,15 +30,25 @@ const StudentPage = async () => {
     <div className="p-4 flex gap-4 flex-col xl:flex-row">
       {/* LEFT */}
       <div className="w-full xl:w-2/3">
-        <div className="h-full bg-white p-4 rounded-md">
+        <div
+          className={`bg-white p-4 rounded-md ${
+            student && student._count.schedules > 0 ? "h-[760px]" : "h-full"
+          }`}
+        >
           <h1 className="text-xl font-semibold">
-            Schedule{classItem ? ` (${classItem.name})` : ""}
+            My Weekly Schedule{student?.class ? ` (${student.class.name})` : ""}
           </h1>
-          {classItem ? (
-            <BigCalendarContainer type="classId" id={classItem.id} />
+          {student ? (
+            student._count.schedules > 0 ? (
+              <BigCalendarContainer type="studentId" id={student.id} />
+            ) : (
+              <p className="mt-4 text-sm text-gray-400">
+                Your weekly schedule has not been added yet.
+              </p>
+            )
           ) : (
             <p className="mt-4 text-sm text-gray-400">
-              No class is assigned to this student account yet.
+              No student profile is linked to this login account yet.
             </p>
           )}
         </div>

@@ -15,9 +15,10 @@ import {
   TeacherSchema,
 } from "./formValidationSchemas";
 import prisma from "./prisma";
-import { Prisma } from "@prisma/client";
+import { Day, Prisma } from "@prisma/client";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { getAnnouncementAudienceWhere } from "./announcements";
+import { getRoleFromSessionClaims } from "./auth";
 
 type CurrentState = { success: boolean; error: boolean; message?: string };
 
@@ -86,7 +87,7 @@ const getResultAssessment = (assessmentId: string) => {
 
 const isAdminUser = async () => {
   const { sessionClaims } = await auth();
-  const role = (sessionClaims?.metadata as { role?: string })?.role;
+  const role = getRoleFromSessionClaims(sessionClaims);
 
   return role === "admin";
 };
@@ -114,9 +115,12 @@ const createAuthUser = async ({
   surname: string;
   role: "teacher" | "student" | "parent";
 }) => {
+  const normalizedUsername = username.trim();
+  const normalizedEmail = email?.trim() || undefined;
+
   const user = await (await clerkClient()).users.createUser({
-    username,
-    ...(email ? { emailAddress: [email] } : {}),
+    username: normalizedUsername,
+    ...(normalizedEmail ? { emailAddress: [normalizedEmail] } : {}),
     password,
     firstName: name,
     lastName: surname,
@@ -140,7 +144,7 @@ const updateAuthUser = async ({
   surname: string;
 }) => {
   await (await clerkClient()).users.updateUser(id, {
-    username,
+    username: username.trim(),
     ...(password ? { password } : {}),
     firstName: name,
     lastName: surname,
@@ -228,6 +232,104 @@ const getOrCreateGrade = async (level: number) => {
       level,
     },
   });
+};
+
+const lessonDayOffsets: Record<LessonSchema["day"], number> = {
+  MONDAY: 0,
+  TUESDAY: 1,
+  WEDNESDAY: 2,
+  THURSDAY: 3,
+  FRIDAY: 4,
+};
+
+const getWeeklyLessonDate = (day: LessonSchema["day"], time: string) => {
+  const [hours, minutes] = time.split(":").map(Number);
+  const date = new Date(2025, 0, 6 + lessonDayOffsets[day], hours, minutes);
+
+  return date;
+};
+
+const getLessonData = (data: LessonSchema) => ({
+  name: data.name,
+  day: data.day,
+  startTime: getWeeklyLessonDate(data.day, data.startTime),
+  endTime: getWeeklyLessonDate(data.day, data.endTime),
+  subjectId: data.subjectId,
+  classId: data.classId,
+  teacherId: data.teacherId,
+});
+
+const isScheduleDay = (value: FormDataEntryValue | null): value is Day =>
+  value === "MONDAY" ||
+  value === "TUESDAY" ||
+  value === "WEDNESDAY" ||
+  value === "THURSDAY" ||
+  value === "FRIDAY";
+
+const getScheduleItemData = (data: FormData) => {
+  const studentId = data.get("studentId")?.toString();
+  const title = data.get("title")?.toString().trim();
+  const day = data.get("day");
+  const startTime = data.get("startTime")?.toString();
+  const endTime = data.get("endTime")?.toString();
+
+  if (
+    !studentId ||
+    !title ||
+    !isScheduleDay(day) ||
+    !startTime ||
+    !endTime ||
+    endTime <= startTime
+  ) {
+    return null;
+  }
+
+  return {
+    studentId,
+    title,
+    day,
+    startTime: getWeeklyLessonDate(day, startTime),
+    endTime: getWeeklyLessonDate(day, endTime),
+  };
+};
+
+const revalidateStudentScheduleViews = (studentId: string) => {
+  revalidatePath(`/list/students/${studentId}`);
+  revalidatePath(`/list/students/${studentId}/schedule`);
+  revalidatePath("/student");
+};
+
+const getTeacherScheduleItemData = (data: FormData) => {
+  const teacherId = data.get("teacherId")?.toString();
+  const title = data.get("title")?.toString().trim();
+  const day = data.get("day");
+  const startTime = data.get("startTime")?.toString();
+  const endTime = data.get("endTime")?.toString();
+
+  if (
+    !teacherId ||
+    !title ||
+    !isScheduleDay(day) ||
+    !startTime ||
+    !endTime ||
+    endTime <= startTime
+  ) {
+    return null;
+  }
+
+  return {
+    teacherId,
+    title,
+    day,
+    startTime: getWeeklyLessonDate(day, startTime),
+    endTime: getWeeklyLessonDate(day, endTime),
+  };
+};
+
+const revalidateTeacherScheduleViews = (teacherId: string) => {
+  revalidatePath(`/list/teachers/${teacherId}`);
+  revalidatePath(`/list/teachers/${teacherId}/schedule`);
+  revalidatePath("/teacher");
 };
 
 export const createSubject = async (
@@ -953,11 +1055,13 @@ export const createLesson = async (
 
   try {
     await prisma.lesson.create({
-      data,
+      data: getLessonData(data),
     });
 
     revalidatePath("/list/lessons");
+    revalidatePath("/list/students");
     revalidatePath(`/list/teachers/${data.teacherId}`);
+    revalidatePath("/student");
     revalidatePath("/teacher");
     return { success: true, error: false };
   } catch (err) {
@@ -992,14 +1096,16 @@ export const updateLesson = async (
       where: {
         id: data.id,
       },
-      data,
+      data: getLessonData(data),
     });
 
     revalidatePath("/list/lessons");
+    revalidatePath("/list/students");
     revalidatePath(`/list/teachers/${data.teacherId}`);
     if (existingLesson.teacherId !== data.teacherId) {
       revalidatePath(`/list/teachers/${existingLesson.teacherId}`);
     }
+    revalidatePath("/student");
     revalidatePath("/teacher");
     return { success: true, error: false };
   } catch (err) {
@@ -1035,8 +1141,172 @@ export const deleteLesson = async (
     await deleteLessonRecord(parseInt(id));
 
     revalidatePath("/list/lessons");
+    revalidatePath("/list/students");
     revalidatePath(`/list/teachers/${lesson.teacherId}`);
+    revalidatePath("/student");
     revalidatePath("/teacher");
+    return { success: true, error: false };
+  } catch (err) {
+    console.log(err);
+    return { success: false, error: true };
+  }
+};
+
+export const createStudentScheduleItem = async (data: FormData) => {
+  if (!(await isAdminUser())) {
+    return { success: false, error: true };
+  }
+
+  const scheduleData = getScheduleItemData(data);
+
+  if (!scheduleData) {
+    return { success: false, error: true };
+  }
+
+  try {
+    await prisma.studentScheduleItem.create({
+      data: scheduleData,
+    });
+
+    revalidateStudentScheduleViews(scheduleData.studentId);
+    return { success: true, error: false };
+  } catch (err) {
+    console.log(err);
+    return { success: false, error: true };
+  }
+};
+
+export const updateStudentScheduleItem = async (data: FormData) => {
+  if (!(await isAdminUser())) {
+    return { success: false, error: true };
+  }
+
+  const id = Number(data.get("id"));
+  const scheduleData = getScheduleItemData(data);
+
+  if (!id || !scheduleData) {
+    return { success: false, error: true };
+  }
+
+  try {
+    await prisma.studentScheduleItem.update({
+      where: {
+        id,
+        studentId: scheduleData.studentId,
+      },
+      data: scheduleData,
+    });
+
+    revalidateStudentScheduleViews(scheduleData.studentId);
+    return { success: true, error: false };
+  } catch (err) {
+    console.log(err);
+    return { success: false, error: true };
+  }
+};
+
+export const deleteStudentScheduleItem = async (data: FormData) => {
+  if (!(await isAdminUser())) {
+    return { success: false, error: true };
+  }
+
+  const id = Number(data.get("id"));
+  const studentId = data.get("studentId")?.toString();
+
+  if (!id || !studentId) {
+    return { success: false, error: true };
+  }
+
+  try {
+    await prisma.studentScheduleItem.delete({
+      where: {
+        id,
+        studentId,
+      },
+    });
+
+    revalidateStudentScheduleViews(studentId);
+    return { success: true, error: false };
+  } catch (err) {
+    console.log(err);
+    return { success: false, error: true };
+  }
+};
+
+export const createTeacherScheduleItem = async (data: FormData) => {
+  if (!(await isAdminUser())) {
+    return { success: false, error: true };
+  }
+
+  const scheduleData = getTeacherScheduleItemData(data);
+
+  if (!scheduleData) {
+    return { success: false, error: true };
+  }
+
+  try {
+    await prisma.teacherScheduleItem.create({
+      data: scheduleData,
+    });
+
+    revalidateTeacherScheduleViews(scheduleData.teacherId);
+    return { success: true, error: false };
+  } catch (err) {
+    console.log(err);
+    return { success: false, error: true };
+  }
+};
+
+export const updateTeacherScheduleItem = async (data: FormData) => {
+  if (!(await isAdminUser())) {
+    return { success: false, error: true };
+  }
+
+  const id = Number(data.get("id"));
+  const scheduleData = getTeacherScheduleItemData(data);
+
+  if (!id || !scheduleData) {
+    return { success: false, error: true };
+  }
+
+  try {
+    await prisma.teacherScheduleItem.update({
+      where: {
+        id,
+        teacherId: scheduleData.teacherId,
+      },
+      data: scheduleData,
+    });
+
+    revalidateTeacherScheduleViews(scheduleData.teacherId);
+    return { success: true, error: false };
+  } catch (err) {
+    console.log(err);
+    return { success: false, error: true };
+  }
+};
+
+export const deleteTeacherScheduleItem = async (data: FormData) => {
+  if (!(await isAdminUser())) {
+    return { success: false, error: true };
+  }
+
+  const id = Number(data.get("id"));
+  const teacherId = data.get("teacherId")?.toString();
+
+  if (!id || !teacherId) {
+    return { success: false, error: true };
+  }
+
+  try {
+    await prisma.teacherScheduleItem.delete({
+      where: {
+        id,
+        teacherId,
+      },
+    });
+
+    revalidateTeacherScheduleViews(teacherId);
     return { success: true, error: false };
   } catch (err) {
     console.log(err);
@@ -1049,7 +1319,7 @@ export const createAssignment = async (
   data: AssignmentSchema
 ) => {
   const { sessionClaims } = await auth();
-  const role = (sessionClaims?.metadata as { role?: string })?.role;
+  const role = getRoleFromSessionClaims(sessionClaims);
 
   if (role !== "admin" && role !== "teacher") {
     return { success: false, error: true };
@@ -1098,7 +1368,7 @@ export const deleteAssignment = async (
 ) => {
   const id = data.get("id") as string;
   const { sessionClaims } = await auth();
-  const role = (sessionClaims?.metadata as { role?: string })?.role;
+  const role = getRoleFromSessionClaims(sessionClaims);
 
   if (role !== "admin" && role !== "teacher") {
     return { success: false, error: true };
@@ -1358,7 +1628,7 @@ export const deleteAnnouncement = async (
 export const markAnnouncementAsRead = async (data: FormData) => {
   const announcementId = Number(data.get("announcementId"));
   const { userId, sessionClaims } = await auth();
-  const role = (sessionClaims?.metadata as { role?: string })?.role;
+  const role = getRoleFromSessionClaims(sessionClaims);
 
   if (!userId || !announcementId) {
     return { success: false, error: true };
@@ -1396,7 +1666,7 @@ export const markAnnouncementAsRead = async (data: FormData) => {
 
 export const markAllAnnouncementsAsRead = async () => {
   const { userId, sessionClaims } = await auth();
-  const role = (sessionClaims?.metadata as { role?: string })?.role;
+  const role = getRoleFromSessionClaims(sessionClaims);
 
   if (!userId) {
     return { success: false, error: true };
@@ -1444,7 +1714,7 @@ export const setAttendanceStatus = async (data: FormData) => {
   }
 
   const { userId, sessionClaims } = await auth();
-  const role = (sessionClaims?.metadata as { role?: string })?.role;
+  const role = getRoleFromSessionClaims(sessionClaims);
 
   if (role !== "admin" && role !== "teacher") {
     return { success: false, error: true };

@@ -27,11 +27,13 @@ const SingleStudentPage = async ({
   const student:
     | (Student & {
         class: Class & { _count: { lessons: number } };
+        _count: { schedules: number };
       })
     | null = await prisma.student.findUnique({
     where: { id },
     include: {
       class: { include: { _count: { select: { lessons: true } } } },
+      _count: { select: { schedules: true } },
     },
   });
 
@@ -132,9 +134,9 @@ const SingleStudentPage = async ({
               />
               <div className="">
                 <h1 className="text-xl font-semibold">
-                  {student.class._count.lessons}
+                  {student._count.schedules}
                 </h1>
-                <span className="text-sm text-gray-400">Lessons</span>
+                <span className="text-sm text-gray-400">Schedule Items</span>
               </div>
             </div>
             {/* CARD */}
@@ -159,7 +161,7 @@ const SingleStudentPage = async ({
             <h1 className="text-xl font-semibold">Student&apos;s Schedule</h1>
             {role === "admin" && (
               <Link
-                href={`/list/lessons?classId=${student.class.id}`}
+                href={`/list/students/${student.id}/schedule`}
                 className="flex items-center gap-2 rounded-md bg-lamaYellow px-4 py-2 text-sm font-medium text-gray-700 hover:brightness-95"
               >
                 <Image src="/lesson.png" alt="" width={16} height={16} />
@@ -167,7 +169,7 @@ const SingleStudentPage = async ({
               </Link>
             )}
           </div>
-          <BigCalendarContainer type="classId" id={student.class.id} />
+          <BigCalendarContainer type="studentId" id={student.id} />
         </div>
       </div>
       {/* RIGHT */}

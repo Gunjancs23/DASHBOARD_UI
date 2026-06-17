@@ -32,6 +32,7 @@ model Student {
   grade       Grade        @relation(fields: [gradeId], references: [id])
   attendances Attendance[]
   results     Result[]
+  schedules   StudentScheduleItem[]
   birthday    DateTime
 }
 
@@ -50,6 +51,7 @@ model Teacher {
   subjects  Subject[]
   lessons   Lesson[]
   classes   Class[]
+  schedules TeacherScheduleItem[]
   birthday  DateTime
 }
 
@@ -156,6 +158,32 @@ model Attendance {
   student   Student @relation(fields: [studentId], references: [id])
   lessonId  Int
   lesson    Lesson  @relation(fields: [lessonId], references: [id])
+}
+
+model StudentScheduleItem {
+  id        Int      @id @default(autoincrement())
+  title     String
+  day       Day
+  startTime DateTime
+  endTime   DateTime
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([day, startTime])
+}
+
+model TeacherScheduleItem {
+  id        Int      @id @default(autoincrement())
+  title     String
+  day       Day
+  startTime DateTime
+  endTime   DateTime
+  teacherId String
+  teacher   Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@index([teacherId])
+  @@index([day, startTime])
 }
 
 model Event {
